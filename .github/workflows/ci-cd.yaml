@@ -1,0 +1,56 @@
+name: TaskFlow CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Job 1: Continuous Integration
+  ci:
+    name: Test and Validate
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Setup Node.js (indien nodig)
+      uses: actions/setup-node@v6
+      with:
+        node-version: '22'
+        cache: 'npm'
+
+    - name: Install dependencies (indien van toepassing)
+      run: npm ci
+      continue-on-error: true
+
+    - name: Run linting (indien van toepassing)
+      run: npm run lint
+      continue-on-error: true
+
+    - name: Validate Backend Dockerfile
+      run: |
+        echo "Checking backend Dockerfile syntax..."
+        docker build --no-cache -t taskflow-backend:ci-test ./backend
+
+    - name: Validate Frontend Dockerfile
+      run: |
+        echo "Checking frontend Dockerfile syntax..."
+        docker build --no-cache -t taskflow-frontend:ci-test ./frontend
+
+    - name: Set up KIND cluster voor validatie
+      uses: helm/kind-action@v1
+      with:
+        cluster_name: validation
+        wait: 30s
+
+    - name: Validate Kubernetes manifests
+      run: |
+        echo "Validating K8s manifests met kubectl..."
+        kubectl apply --dry-run=client -f k8s/
